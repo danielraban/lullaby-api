@@ -1,146 +1,87 @@
-.PHONY: clean deepclean install dev black isort mypy ruff toml-sort lint pre-commit test freeze version build upload docs docs-autobuild docs-coverage reports docs-all
+.PHONY: clean clean-build clean-pyc clean-test coverage dist docs help install lint lint/flake8
+.DEFAULT_GOAL := help
 
-########################################################################################
-# Variables
-########################################################################################
+define BROWSER_PYSCRIPT
+import os, webbrowser, sys
 
-# Only create virtual environment when not in CI and pipenv is available.
-PIPRUN := $(if $(and $(shell [ "$$CI" != "true" ] && echo 1),$(shell command -v pipenv > /dev/null 2>&1 && echo 1)),pipenv run)
+from urllib.request import pathname2url
 
-# Documentation target directory, will be adapted to specific folder for readthedocs.
-PUBLIC_DIR := $(if $(shell [ "$$READTHEDOCS" = "True" ] && echo 1),$$READTHEDOCS_OUTPUT/html,public)
+webbrowser.open("file://" + pathname2url(os.path.abspath(sys.argv[1])))
+endef
+export BROWSER_PYSCRIPT
 
-########################################################################################
-# Development Environment Management
-########################################################################################
+define PRINT_HELP_PYSCRIPT
+import re, sys
 
-# Remove common intermediate files.
-clean:
-	-rm -rf \
-		${PUBLIC_DIR} \
-		.coverage \
-		.mypy_cache \
-		.pytest_cache \
-		.ruff_cache \
-		Pipfile* \
-		coverage.xml \
-		dist
-	find . -name '*.egg-info' -print0 | xargs -0 rm -rf
-	find . -name '*.pyc' -print0 | xargs -0 rm -f
-	find . -name '*.swp' -print0 | xargs -0 rm -f
-	find . -name '.DS_Store' -print0 | xargs -0 rm -f
-	find . -name '__pycache__' -print0 | xargs -0 rm -rf
+for line in sys.stdin:
+	match = re.match(r'^([a-zA-Z_-]+):.*?## (.*)$$', line)
+	if match:
+		target, help = match.groups()
+		print("%-20s %s" % (target, help))
+endef
+export PRINT_HELP_PYSCRIPT
 
-# Remove pre-commit hook, virtual environment alongside itermediate files.
-deepclean: clean
-	if command -v pre-commit > /dev/null 2>&1; then pre-commit uninstall --hook-type pre-push; fi
-	if command -v pipenv >/dev/null 2>&1 && pipenv --venv >/dev/null 2>&1; then pipenv --rm; fi
+BROWSER := python -c "$$BROWSER_PYSCRIPT"
 
-# Install the package in editable mode.
-install:
-	${PIPRUN} pip install -e . -c constraints/$(or $(SS_CONSTRAINTS_VERSION),default).txt
+help:
+	@python -c "$$PRINT_HELP_PYSCRIPT" < $(MAKEFILE_LIST)
 
-# Install the package in editable mode with specific optional dependencies.
-dev-%:
-	${PIPRUN} pip install -e .[$*] -c constraints/$(or $(SS_CONSTRAINTS_VERSION),default).txt
+clean: clean-build clean-pyc clean-test ## remove all build, test, coverage and Python artifacts
 
-# Prepare the development environment.
-# Install the pacakge in editable mode with all optional dependencies and pre-commit hoook.
-dev:
-	${PIPRUN} pip install -e .[docs,lint,package,test] -c constraints/$(or $(SS_CONSTRAINTS_VERSION),default).txt
-	if [ "${CI}" != "true" ] && command -v pre-commit > /dev/null 2>&1; then pre-commit install --hook-type pre-push; fi
+clean-build: ## remove build artifacts
+	rm -fr build/
+	rm -fr dist/
+	rm -fr .eggs/
+	find . -name '*.egg-info' -exec rm -fr {} +
+	find . -name '*.egg' -exec rm -f {} +
 
-########################################################################################
-# Lint and pre-commit
-########################################################################################
+clean-pyc: ## remove Python file artifacts
+	find . -name '*.pyc' -exec rm -f {} +
+	find . -name '*.pyo' -exec rm -f {} +
+	find . -name '*~' -exec rm -f {} +
+	find . -name '__pycache__' -exec rm -fr {} +
 
-# Check lint with black.
-black:
-	${PIPRUN} python -m black --check .
+clean-test: ## remove test and coverage artifacts
+	rm -fr .tox/
+	rm -f .coverage
+	rm -fr htmlcov/
+	rm -fr .pytest_cache
 
-# Check lint with isort.
-isort:
-	${PIPRUN} python -m isort --check .
+lint/flake8: ## check style with flake8
+	flake8 lullaby_api tests
 
-# Check lint with mypy.
-mypy:
-	${PIPRUN} python -m mypy .
+lint: lint/flake8 ## check style
 
-# Check lint with ruff.
-ruff:
-	${PIPRUN} python -m ruff .
+test: ## run tests quickly with the default Python
+	python setup.py test
 
-# Check lint with toml-sort.
-toml-sort:
-	${PIPRUN} toml-sort --check pyproject.toml
+test-all: ## run tests on every Python version with tox
+	tox
 
-# Check lint with all linters.
-lint-check: black isort mypy ruff toml-sort
+coverage: ## check code coverage quickly with the default Python
+	coverage run --source lullaby_api setup.py test
+	coverage report -m
+	coverage html
+	$(BROWSER) htmlcov/index.html
 
-# Run pre-commit with autofix against all files.
-lint:
-	pre-commit run --all-files
+docs: ## generate Sphinx HTML documentation, including API docs
+	rm -f docs/lullaby_api.rst
+	rm -f docs/modules.rst
+	sphinx-apidoc -o docs/ lullaby_api
+	$(MAKE) -C docs clean
+	$(MAKE) -C docs html
+	$(BROWSER) docs/_build/html/index.html
 
-########################################################################################
-# Test
-########################################################################################
+servedocs: docs ## compile the docs watching for changes
+	watchmedo shell-command -p '*.rst' -c '$(MAKE) -C docs html' -R -D .
 
-# Run test with coverage report.
-test:
-	${PIPRUN} python -m coverage erase
-	${PIPRUN} python -m coverage run -m pytest
-	${PIPRUN} python -m coverage report
-	${PIPRUN} python -m coverage xml
+release: dist ## package and upload a release
+	twine upload dist/*
 
-########################################################################################
-# Package
-########################################################################################
+dist: clean ## builds source and wheel package
+	python setup.py sdist
+	python setup.py bdist_wheel
+	ls -l dist
 
-# Show currently installed dependecies excluding the package itself with versions
-freeze:
-	@${PIPRUN} pip freeze --exclude-editable
-
-# Get the version of the package.
-version:
-	${PIPRUN} python -m setuptools_scm
-
-# Build the package
-build:
-	${PIPRUN} python -m build
-
-# Upload the package
-upload:
-	${PIPRUN} python -m twine upload dist/*
-
-########################################################################################
-# Documentation
-########################################################################################
-
-# Generate documentation.
-docs:
-	${PIPRUN} python -m sphinx.cmd.build docs ${PUBLIC_DIR}
-
-# Generate documentation with auto build when changes happen.
-docs-autobuild:
-	${PIPRUN} python -m sphinx_autobuild docs ${PUBLIC_DIR} --watch src
-
-# Generate mypy reports.
-docs-mypy:
-	${PIPRUN} python -m mypy src test --html-report ${PUBLIC_DIR}/reports/mypy
-
-# Generate coverage reports and badge.
-docs-coverage:
-	${PIPRUN} python -m coverage erase
-	${PIPRUN} python -m coverage run -m pytest
-	${PIPRUN} python -m coverage html -d ${PUBLIC_DIR}/reports/coverage
-	${PIPRUN} bash scripts/generate-coverage-badge.sh ${PUBLIC_DIR}/reports/coverage
-
-# Generate all reports.
-reports: docs-mypy docs-coverage
-
-# Generate all documentation with reports.
-docs-all: docs reports
-
-########################################################################################
-# End
-########################################################################################
+install: clean ## install the package to the active Python's site-packages
+	python setup.py install
