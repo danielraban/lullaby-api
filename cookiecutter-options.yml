@@ -1,0 +1,9 @@
+default_context:
+    project_name: "lullaby_api"
+    app_name: "lullaby_api"
+    python_version: "3.8"
+    admin_user_username: "admin"
+    admin_user_email: "danielraban@proton.me"
+    admin_user_password: "admin"
+    use_celery: "yes"
+    wsgi_server: "uwsgi"

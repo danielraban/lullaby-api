@@ -1,58 +1,35 @@
-version: "3.6"
-
-x-build-args: &build_args
-  INSTALL_PYTHON_VERSION: "3"
-  INSTALL_NODE_VERSION: "18"
-
-x-default-volumes: &default_volumes
-  volumes:
-    - ./:/app
-    - node-modules:/app/node_modules
-    - ./dev.db:/tmp/dev.db
+# WARNING: this file is not suitable for production, please use with caution
+version: '3'
 
 services:
-  flask-dev:
-    build:
-      context: .
-      target: development
-      args:
-        <<: *build_args
-    image: "lullaby_api-development"
-    ports:
-      - "8080:5000"
-      - "2992:2992"
-    <<: *default_volumes
-
-  flask-prod:
-    build:
-      context: .
-      target: production
-      args:
-        <<: *build_args
-    image: "lullaby_api-production"
-    ports:
-      - "8080:5000"
+  web:
+    image: lullaby_api
+    build: .
+    command: uwsgi --http 0.0.0.0:5000 --module lullaby_api.wsgi:app
+    env_file:
+      - ./.flaskenv
     environment:
-      FLASK_ENV: production
-      FLASK_DEBUG: 0
-      LOG_LEVEL: info
-      GUNICORN_WORKERS: 4
-    <<: *default_volumes
-
-  manage:
-    build:
-      context: .
-      target: development
-      args:
-        <<: *build_args
-    entrypoint: flask
+      - DATABASE_URI=sqlite:////db/lullaby_api.db
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq
+      - CELERY_RESULT_BACKEND_URL=redis://redis
+    volumes:
+      - ./lullaby_api:/code/lullaby_api
+      - ./db/:/db/
+    ports:
+      - "5000:5000"
+  rabbitmq:
+    image: rabbitmq
+  redis:
+    image: redis
+  celery:
+    image: lullaby_api
+    command: "celery worker -A lullaby_api.celery_app:app"
+    env_file:
+      - ./.flaskenv
+    volumes:
+      - .:/code
+    depends_on:
+      - rabbitmq
     environment:
-      FLASK_ENV: production
-      FLASK_DEBUG: 0
-    image: "lullaby_api-manage"
-    stdin_open: true
-    tty: true
-    <<: *default_volumes
-
-volumes:
-  node-modules:
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq
+      - CELERY_RESULT_BACKEND_URL=redis://redis
