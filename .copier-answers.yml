@@ -1,0 +1,17 @@
+_commit: v0.0.22
+_src_path: gh:serious-scaffold/serious-scaffold-python
+author_email: danieltraban@gmail.com
+author_name: Daniel Raban
+coverage_threshold: 100
+default_py: '3.11'
+max_py: '3.11'
+min_py: '3.8'
+module_name: lullaby_api
+organization_name: Lullaby
+package_name: lullaby-api
+project_description: A development-focused Python project template with various integrations,
+    configurations and modules.api for the lullaby app
+project_name: Serious Scaffold PythonlullabyUi
+repo_host_type: github.com
+repo_name: lullaby-api
+repo_namespace: danielraban
