@@ -1,1 +1,1 @@
-"""Unit test package for lullaby_api."""
+"""Tests for the app."""
